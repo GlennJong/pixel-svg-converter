@@ -5,7 +5,6 @@ import Pixelator from './components/Pixelator'
 
 
 function App() {
-  const [src, setSrc] = useState<string>('');
   const [srcList, setSrcList] = useState<string[]>([]);
 
   const dropRef = useRef<HTMLDivElement>(null);
@@ -16,7 +15,6 @@ function App() {
       const reader = new FileReader();
       reader.onload = (event) => {
         if (typeof event.target?.result === 'string') {
-          // 只顯示第一張，或可改為多圖顯示
           list.push(event.target.result);
           if (list.length === files.length) setSrcList(list);
         }
@@ -55,8 +53,6 @@ function App() {
       dropRef.current.style.borderColor = '#aaa';
     }
   };
-
-  console.log(srcList);
 
   return (
     <div className="app">

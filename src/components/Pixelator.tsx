@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-// from http://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
-
 function pixelateImage(originalImage: HTMLImageElement, options?: { transparence?: boolean, ignore?: string[] } | undefined) {
   const { transparence } = options || {};
   const canvas = document.createElement("canvas");
