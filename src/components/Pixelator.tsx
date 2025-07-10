@@ -1,96 +1,78 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // from http://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
 
-function pixelateImage(originalImage: HTMLImageElement, pixelationFactor: number) {
+function pixelateImage(originalImage: HTMLImageElement, options?: { transparence?: boolean, ignore?: string[] } | undefined) {
+  const { transparence } = options || {};
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (!context) return;
 
-
-  const originalWidth = originalImage.width;
-  const originalHeight = originalImage.height;
-  const canvasWidth = originalWidth;
-  const canvasHeight = originalHeight;
+  const canvasWidth = originalImage.width;
+  const canvasHeight = originalImage.height;
 
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
 
-  context.drawImage(originalImage, 0, 0, originalWidth, originalHeight);
+  context.drawImage(originalImage, 0, 0, canvasWidth, canvasHeight);
   const originalImageData = context.getImageData(
     0,
     0,
-    originalWidth,
-    originalHeight
+    canvasWidth,
+    canvasHeight
   ).data;
 
   const result = [];
 
-  let newY = 0;
-  if (pixelationFactor !== 0) {
-    for (let y = 0; y < originalHeight; y += pixelationFactor) {
-      newY += 1;
-      let newX = 0;
-      for (let x = 0; x < originalWidth; x += pixelationFactor) {
-        newX += 1;
-        // extracting the position of the sample pixel
-        const pixelIndexPosition = (x + y * originalWidth) * 4;
-        // drawing a square replacing the current pixels
-        
-        const rgba = [
-          originalImageData[pixelIndexPosition],
-          originalImageData[pixelIndexPosition+1],
-          originalImageData[pixelIndexPosition+2],
-          originalImageData[pixelIndexPosition+3] / 255,
-        ]
+  let newY = -1;
+  for (let y = 0; y < canvasHeight; y += 1) {
+    newY += 1;
+    let newX = -1;
+    for (let x = 0; x < canvasWidth; x += 1) {
+      newX += 1;
+      // extracting the position of the sample pixel
+      const pixelIndexPosition = (x + y * canvasWidth) * 4;
+      // drawing a square replacing the current pixels
 
-        context.fillStyle = 'rgba(' +
-          originalImageData[pixelIndexPosition] + ',' + // r
-          originalImageData[pixelIndexPosition + 1] + ',' + // g
-          originalImageData[pixelIndexPosition + 2] + ',' + // b
-          originalImageData[pixelIndexPosition + 3] / 255 //a
-        + ')';
+      // ignore some pixels
+      if (!transparence && originalImageData[pixelIndexPosition + 3] === 0) continue;
+      
+      const rgba = [
+        originalImageData[pixelIndexPosition],
+        originalImageData[pixelIndexPosition+1],
+        originalImageData[pixelIndexPosition+2],
+        originalImageData[pixelIndexPosition+3] / 255,
+      ]
 
-        result.push({
-          x: newX * pixelationFactor,
-          y: newY * pixelationFactor,
-          rgba
-        })
-        
-        context.fillRect(x, y, pixelationFactor, pixelationFactor);
-      }
+      context.fillStyle = 'rgba(' +
+        originalImageData[pixelIndexPosition] + ',' + // r
+        originalImageData[pixelIndexPosition + 1] + ',' + // g
+        originalImageData[pixelIndexPosition + 2] + ',' + // b
+        originalImageData[pixelIndexPosition + 3] / 255 //a
+      + ')';
+
+      result.push(`<rect width="1" height="1" x="${newX}" y="${newY}" fill="rgba(${rgba.join(',')})"></rect>`)
+      context.fillRect(x, y, 1, 1);
     }
   }
-
-  return result;
+  
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}px" height="${canvasHeight}px" viewBox="0 0 ${canvasWidth} ${canvasHeight}">${result.join('')}</svg>`;
 }
 
-type PixelData = {
-  x: number;
-  y: number;
-  rgba: number[];
-} 
-
-
 const Pixelator = ({ src }: { src: string }) => {
-
   const rootRef = useRef<HTMLDivElement>(null);
-  const [ data, setData ] = useState<PixelData[]>();
-  const [ scale, setScale ] = useState(1);
-  const [ imgSize, setImgSize ] = useState<number[] | undefined>();
-  
+  const [ svg, setSvg ] = useState<string>();
 
   useEffect(() => {
     handleInitPixelator();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src])
 
-  function handlePreloadImage() {
+  function handlePreloadImage(): Promise<HTMLImageElement> {
     return new Promise((resolve) => {
       const img = document.createElement('img');
       img.src = src;
       img.onload = function() {
-        setImgSize([img.width, img.height]);
         resolve(img);
       }
     })
@@ -98,21 +80,17 @@ const Pixelator = ({ src }: { src: string }) => {
 
   const handleInitPixelator = async() => {
     const image = await handlePreloadImage();
-    const data = pixelateImage(image, 1);
-    
-    setData(data);
+    const svg = pixelateImage(image, { transparence: false });
+
+    setSvg(svg);
   }
   
 
   function handleExportSVG() {
-    if (!rootRef.current) return
-    const svg = rootRef.current.querySelector('svg');
     if(!svg) return
-    const svgString = new XMLSerializer().serializeToString(svg);
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const svgUrl = URL.createObjectURL(svgBlob);
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const svgUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
-    console.log(downloadLink);
     downloadLink.href = svgUrl;
     downloadLink.download = 'pixel.svg';
     document.body.appendChild(downloadLink);
@@ -123,28 +101,10 @@ const Pixelator = ({ src }: { src: string }) => {
   
 
   return (
-    <>
-      <div ref={rootRef} style={{ display: 'flex', padding: '20px', background: '#666' }}>
-        <div>
-          <img src={src} />
-        </div>
-        <div>
-          { (data && imgSize) &&
-            <svg
-              width={`${imgSize[0]}px`}
-              height={`${imgSize[1]}px`}
-              viewBox={`0 0 ${data[data.length - 1].x} ${data[data.length - 1].y}`}
-              viewPort={`0 0 ${data[data.length - 1].x} ${data[data.length - 1].y}`}
-            >
-              { data.map((_item, i) =>
-                <rect key={i} width={scale * 1} height={scale * 1} x={_item.x} y={_item.y} fill={`rgba(${_item.rgba.join(',')})`} />
-              ) }
-            </svg>
-          }
-        </div>
-        <button onAbort={handleExportSVG}>output</button>
-      </div>
-    </>
+    <div ref={rootRef} style={{display: 'flex', position: 'relative', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', border: '1px solid #aaa'}} >
+      { svg && <div dangerouslySetInnerHTML={{__html: svg}}></div> }
+      <button style={{ position: 'absolute', right: '12px', bottom: '12px', border: 'none', background: 'none', cursor: 'pointer' }} onClick={handleExportSVG}>Export</button>
+    </div>
   )
 }
 
